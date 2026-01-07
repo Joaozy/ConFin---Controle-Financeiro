@@ -13,7 +13,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.89.0",
-    "@wppconnect-team/wppconnect": "^1.37.8",
+    "@wppconnect-team/wppconnect": "^1.37.9",
     "dotenv": "^17.2.3"
   }
 }
