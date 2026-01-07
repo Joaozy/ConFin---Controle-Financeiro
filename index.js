@@ -2,13 +2,11 @@ import dotenv from 'dotenv';
 import wppconnect from '@wppconnect-team/wppconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
-import http from 'http'; // MÓDULO PARA O "SITE FALSO"
+import http from 'http';
 
 dotenv.config();
 
-// --- 0. TRUQUE PARA O RENDER NÃO DERRUBAR O BOT ---
-// O Render exige que "Web Services" tenham uma porta aberta.
-// Criamos um servidorzinho simples só para responder "Estou vivo".
+// --- 0. SERVIDOR FAKE PARA O RENDER ---
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.write('🤖 Bot Financeiro está rodando!');
@@ -47,9 +45,7 @@ async function buscarUsuario(telefoneDoZap) {
 async function analisarMensagem(texto) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const hoje = new Date().toISOString().split('T')[0];
-
-    const prompt = `Contador. Hoje: ${hoje}. Texto: "${texto}". 
-    JSON: {"acao": "criar"|"editar", "id_ref": null|num, "valor_busca": null|float, "dados": {"tipo": "receita"|"despesa", "valor": 0.0, "descricao": "string", "categoria": "string", "data_movimentacao": "YYYY-MM-DD"}}`;
+    const prompt = `Contador. Hoje: ${hoje}. Texto: "${texto}". JSON: {"acao": "criar"|"editar", "id_ref": null|num, "valor_busca": null|float, "dados": {"tipo": "receita"|"despesa", "valor": 0.0, "descricao": "string", "categoria": "string", "data_movimentacao": "YYYY-MM-DD"}}`;
 
     try {
         const result = await model.generateContent(prompt);
@@ -60,18 +56,26 @@ async function analisarMensagem(texto) {
     } catch (e) { return null; }
 }
 
-
-// --- 3. WHATSAPP COM PAREAMENTO POR CÓDIGO (SEM QR) ---
+// --- 3. WHATSAPP COM CÓDIGO DE PAREAMENTO FORÇADO ---
 wppconnect.create({
-    session: 'financeiro-production-v3', // Mudei v2 para v3 para limpar sessão antiga
+    session: 'financeiro-production-v4', // Mudei para v4 para limpar cache
     headless: true,
-    logQR: false, // Desliga QR Code nativo
+    logQR: false,
     
-    // !!! AQUI ESTÁ A MÁGICA !!!
-    // Coloque o número do ROBÔ (Fixo) com 55 + DDD + Numero
-    phoneNumber: '557931992920', 
-    
-    // Configurações para o Docker/Render
+    // SEU NÚMERO FIXO (Confirme se está correto)
+    phoneNumber: '557931992920',
+
+    // FORÇA O CÓDIGO APARECER NO LOG
+    catchLinkCode: (str) => {
+        console.log('\n\n================ CÓDIGO DE PAREAMENTO =================');
+        console.log(`CODE: ${str}`);
+        console.log('=======================================================\n\n');
+    },
+
+    // IMPEDE O AUTO-CLOSE (Tempo infinito)
+    autoClose: 0,
+    qrTimeout: 0,
+
     browserArgs: [
         '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote',
@@ -81,7 +85,6 @@ wppconnect.create({
     start(client);
     iniciarOuvinteDeAuth(client);
 }).catch((error) => console.log(error));
-
 
 // --- 4. FUNÇÕES DO BOT ---
 function iniciarOuvinteDeAuth(client) {
@@ -120,7 +123,6 @@ function start(client) {
             const { data, error } = await supabase.from('movimentacoes').insert([{ ...resultado.dados, user_phone: message.from, profile_id: usuario.id }]).select();
             if (!error) await client.sendText(message.from, `✅ Salvo! (#${data[0].id}) \n💰 R$ ${resultado.dados.valor}`);
         } else if (resultado.acao === 'editar') {
-            // Lógica de edição simplificada para caber aqui
             const { error } = await supabase.from('movimentacoes').update(resultado.dados).eq('id', resultado.id_ref || 0); 
             if(!error) await client.sendText(message.from, `✏️ Editado!`);
         }
