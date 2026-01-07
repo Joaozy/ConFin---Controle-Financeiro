@@ -45,7 +45,7 @@ async function buscarUsuario(telefoneDoZap) {
 }
 
 async function analisarMensagem(texto) {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const hoje = new Date().toISOString().split('T')[0];
 
     const prompt = `Contador. Hoje: ${hoje}. Texto: "${texto}". 
