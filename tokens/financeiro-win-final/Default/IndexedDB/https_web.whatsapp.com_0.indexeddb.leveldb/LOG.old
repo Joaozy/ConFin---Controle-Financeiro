@@ -1,0 +1,24 @@
+2026/01/07-10:20:15.722 7e08 Reusing MANIFEST C:\ControleFinanceiro\backend-bot\tokens\financeiro-win-final\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/07-10:20:15.723 7e08 Recovering log #75
+2026/01/07-10:20:15.730 7e08 Reusing old log C:\ControleFinanceiro\backend-bot\tokens\financeiro-win-final\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000075.log 
+2026/01/07-10:20:16.759 7580 Level-0 table #81: started
+2026/01/07-10:20:16.765 7580 Level-0 table #81: 237647 bytes OK
+2026/01/07-10:20:16.766 7580 Delete type=0 #75
+2026/01/07-10:20:16.767 6fbc Manual compaction at level-0 from '\x00'\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00(\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/01/07-10:20:16.768 6fbc Level-0 table #83: started
+2026/01/07-10:20:16.770 6fbc Level-0 table #83: 444 bytes OK
+2026/01/07-10:20:16.770 6fbc Delete type=0 #80
+2026/01/07-10:20:16.771 6fbc Manual compaction at level-0 from '\x00(\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00)\x00\x00\x00' @ 0 : 0; will stop at '\x00(\x00\x00\x05' @ 93825 : 0
+2026/01/07-10:20:16.771 6fbc Compacting 1@0 + 1@1 files
+2026/01/07-10:20:16.775 6fbc Generated table #84@0: 5852 keys, 131587 bytes
+2026/01/07-10:20:16.775 6fbc Compacted 1@0 + 1@1 files => 131587 bytes
+2026/01/07-10:20:16.776 6fbc compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/01/07-10:20:16.776 6fbc Delete type=2 #83
+2026/01/07-10:20:16.776 6fbc Manual compaction at level-0 from '\x00(\x00\x00\x05' @ 93825 : 0 .. '\x00)\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/01/07-10:20:16.997 7e08 Compacting 1@1 + 1@2 files
+2026/01/07-10:20:17.012 7e08 Generated table #85@1: 20418 keys, 713173 bytes
+2026/01/07-10:20:17.012 7e08 Compacted 1@1 + 1@2 files => 713173 bytes
+2026/01/07-10:20:17.013 7e08 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/01/07-10:20:17.013 7e08 Delete type=2 #78
+2026/01/07-10:20:17.013 7e08 Delete type=2 #81
+2026/01/07-10:20:17.013 7e08 Delete type=2 #84
