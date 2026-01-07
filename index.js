@@ -99,31 +99,37 @@ function iniciarOuvinteDeAuth(client) {
     }).subscribe();
 }
 
-// ... resto do código acima igual ...
-
 function start(client) {
     console.log('✅ Bot Iniciado e Pronto!');
     client.onMessage(async (message) => {
-        // Ignora status e grupos
         if (message.isGroupMsg || message.isStatus || message.from === 'status@broadcast') return;
         
-        // --- LOG DE DEBUG (PARA DESCOBRIR O NÚMERO) ---
-        console.log(`\n🔎 RECEBI MENSAGEM DE: ${message.from}`);
+        // --- 🚨 CORREÇÃO DO BUG DO LID (NUMERO GIGANTE) 🚨 ---
+        // O WhatsApp às vezes manda o ID interno (@lid) em vez do telefone.
+        // Aqui nós forçamos ele a pegar o número real do remetente.
+        let telefoneDoUsuario = message.from;
+        
+        if (telefoneDoUsuario.includes('@lid')) {
+            // Se veio o LID, pegamos o número real que fica escondido no objeto 'sender'
+            if (message.sender && message.sender.id) {
+                telefoneDoUsuario = message.sender.id; // Ex: 5579998134523@c.us
+            }
+        }
+        // -------------------------------------------------------
+
+        console.log(`\n🔎 RECEBI DE: ${telefoneDoUsuario}`);
         console.log(`   Texto: "${message.body}"`);
 
-        const usuario = await buscarUsuario(message.from);
+        // Usa o telefone corrigido para buscar no banco
+        const usuario = await buscarUsuario(telefoneDoUsuario);
         
         if (!usuario) {
-            console.log(`⛔ BLOQUEADO: O número ${message.from} não foi encontrado no Supabase.`);
-            console.log(`   Dica: Verifique se na tabela 'profiles' o telefone está salvo corretamente.`);
-            
-            // Vamos testar a normalização no log para ver como fica
-            const zapNormalizado = normalizarParaComparacao(message.from);
-            console.log(`   Número Normalizado pelo Bot: ${zapNormalizado}`);
+            console.log(`⛔ BLOQUEADO: O número ${telefoneDoUsuario} não está no banco.`);
+            console.log(`   Normalizado tentado: ${normalizarParaComparacao(telefoneDoUsuario)}`);
             return;
         }
 
-        console.log(`✅ USUÁRIO ENCONTRADO: ${usuario.name} (ID: ${usuario.id})`);
+        console.log(`✅ USUÁRIO: ${usuario.name}`);
 
         // Comando !nome
         if (message.body.toLowerCase().startsWith('!nome ')) {
@@ -133,21 +139,25 @@ function start(client) {
             return;
         }
 
-        // Processa a mensagem na IA
         const resultado = await analisarMensagem(message.body);
         
         if (!resultado) { 
-            console.log("❌ IA não entendeu ou retornou null");
-            await client.sendText(message.from, "🤔 Não entendi. Tente: 'Gastei 50 padaria'"); 
+            await client.sendText(message.from, "🤔 Não entendi."); 
             return; 
         }
 
         if (resultado.dados?.categoria) resultado.dados.categoria = padronizarCategoria(resultado.dados.categoria);
 
         if (resultado.acao === 'criar') {
-            const { data, error } = await supabase.from('movimentacoes').insert([{ ...resultado.dados, user_phone: message.from, profile_id: usuario.id }]).select();
+            const { data, error } = await supabase.from('movimentacoes').insert([{ 
+                ...resultado.dados, 
+                user_phone: telefoneDoUsuario, // Salva o número real, não o LID
+                profile_id: usuario.id 
+            }]).select();
+            
             if (!error) await client.sendText(message.from, `✅ Salvo! (#${data[0].id}) \n💰 R$ ${resultado.dados.valor}`);
-            else console.log("Erro ao inserir no banco:", error);
+            else console.log("Erro banco:", error);
+
         } else if (resultado.acao === 'editar') {
             const { error } = await supabase.from('movimentacoes').update(resultado.dados).eq('id', resultado.id_ref || 0); 
             if(!error) await client.sendText(message.from, `✏️ Editado!`);
