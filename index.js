@@ -99,14 +99,33 @@ function iniciarOuvinteDeAuth(client) {
     }).subscribe();
 }
 
+// ... resto do código acima igual ...
+
 function start(client) {
     console.log('✅ Bot Iniciado e Pronto!');
     client.onMessage(async (message) => {
+        // Ignora status e grupos
         if (message.isGroupMsg || message.isStatus || message.from === 'status@broadcast') return;
         
-        const usuario = await buscarUsuario(message.from);
-        if (!usuario) return;
+        // --- LOG DE DEBUG (PARA DESCOBRIR O NÚMERO) ---
+        console.log(`\n🔎 RECEBI MENSAGEM DE: ${message.from}`);
+        console.log(`   Texto: "${message.body}"`);
 
+        const usuario = await buscarUsuario(message.from);
+        
+        if (!usuario) {
+            console.log(`⛔ BLOQUEADO: O número ${message.from} não foi encontrado no Supabase.`);
+            console.log(`   Dica: Verifique se na tabela 'profiles' o telefone está salvo corretamente.`);
+            
+            // Vamos testar a normalização no log para ver como fica
+            const zapNormalizado = normalizarParaComparacao(message.from);
+            console.log(`   Número Normalizado pelo Bot: ${zapNormalizado}`);
+            return;
+        }
+
+        console.log(`✅ USUÁRIO ENCONTRADO: ${usuario.name} (ID: ${usuario.id})`);
+
+        // Comando !nome
         if (message.body.toLowerCase().startsWith('!nome ')) {
             const novoNome = message.body.slice(6).trim();
             await supabase.from('profiles').update({ name: novoNome }).eq('id', usuario.id);
@@ -114,14 +133,21 @@ function start(client) {
             return;
         }
 
+        // Processa a mensagem na IA
         const resultado = await analisarMensagem(message.body);
-        if (!resultado) { await client.sendText(message.from, "🤔 Não entendi."); return; }
+        
+        if (!resultado) { 
+            console.log("❌ IA não entendeu ou retornou null");
+            await client.sendText(message.from, "🤔 Não entendi. Tente: 'Gastei 50 padaria'"); 
+            return; 
+        }
 
         if (resultado.dados?.categoria) resultado.dados.categoria = padronizarCategoria(resultado.dados.categoria);
 
         if (resultado.acao === 'criar') {
             const { data, error } = await supabase.from('movimentacoes').insert([{ ...resultado.dados, user_phone: message.from, profile_id: usuario.id }]).select();
             if (!error) await client.sendText(message.from, `✅ Salvo! (#${data[0].id}) \n💰 R$ ${resultado.dados.valor}`);
+            else console.log("Erro ao inserir no banco:", error);
         } else if (resultado.acao === 'editar') {
             const { error } = await supabase.from('movimentacoes').update(resultado.dados).eq('id', resultado.id_ref || 0); 
             if(!error) await client.sendText(message.from, `✏️ Editado!`);
