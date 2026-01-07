@@ -60,17 +60,18 @@ async function analisarMensagem(texto) {
     } catch (e) { return null; }
 }
 
-// --- 3. WHATSAPP BLINDADO PARA NUVEM ---
+
+// --- 3. WHATSAPP COM PAREAMENTO POR CÓDIGO (SEM QR) ---
 wppconnect.create({
-    session: 'financeiro-production-v2', // Mudei o nome para forçar uma sessão nova e limpa
+    session: 'financeiro-production-v3', // Mudei v2 para v3 para limpar sessão antiga
     headless: true,
-    logQR: false, // Desligamos o nativo para usar o catchQR (mais confiável)
-    catchQR: (base64Qr, asciiQR) => {
-        console.log('\n\n================ QR CODE =================');
-        console.log(asciiQR); // FORÇA A IMPRESSÃO NO LOG
-        console.log('==========================================\n\n');
-    },
-    // Configurações para não travar no Render
+    logQR: false, // Desliga QR Code nativo
+    
+    // !!! AQUI ESTÁ A MÁGICA !!!
+    // Coloque o número do ROBÔ (Fixo) com 55 + DDD + Numero
+    phoneNumber: '557931992920', 
+    
+    // Configurações para o Docker/Render
     browserArgs: [
         '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas', '--no-first-run', '--no-zygote',
@@ -80,6 +81,7 @@ wppconnect.create({
     start(client);
     iniciarOuvinteDeAuth(client);
 }).catch((error) => console.log(error));
+
 
 // --- 4. FUNÇÕES DO BOT ---
 function iniciarOuvinteDeAuth(client) {
