@@ -96,58 +96,45 @@ async function analisarMensagem(texto) {
 
 // --- 4. CONEXÃO WHATSAPP ---
 
+// --- 4. CONEXÃO WHATSAPP (MODO RENDER POTENTE) ---
 wppconnect.create({
-    session: 'financeiro-render-v10', // Sessão nova para evitar conflitos
-    headless: true, // OBRIGATÓRIO SER TRUE NA NUVEM
-    logQR: false,   // Vamos usar o código de texto (Pairing Code)
+    session: 'financeiro-render-v11', // v11 para limpar cache corrompido
+    headless: true,
+    logQR: false,
+    phoneNumber: '557931992920', // SEU NÚMERO
     
-    // SEU NÚMERO FIXO (Para gerar o Código de Pareamento)
-    // Confirme se está correto: 55 + DDD + Numero
-    phoneNumber: '557931992920', 
-
-    // Força o código aparecer no LOG do Render
     catchLinkCode: (str) => {
         console.log('\n================ CÓDIGO DE PAREAMENTO =================');
         console.log(`CODE: ${str}`);
         console.log('=======================================================\n');
     },
 
-    // Configurações Anti-Queda
-    autoClose: 0, 
+    // AUMENTA A PACIÊNCIA DO ROBÔ
+    autoClose: 0,
     qrTimeout: 0,
     
-    // Argumentos OBRIGATÓRIOS para Linux/Docker (Render)
-    browserArgs: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process', 
-        '--disable-gpu'
-    ],
+    // CONFIGURAÇÕES AVANÇADAS DO PUPPETEER
+    puppeteerOptions: {
+        userDataDir: './tokens/financeiro-render-v11', // Força salvar no lugar certo
+        timeout: 0, // 0 = Espera infinita (nunca desiste de carregar a página)
+        protocolTimeout: 0, // 0 = Nunca desiste de falar com o Chrome (RESOLVE O SEU ERRO)
+        
+        // Argumentos para deixar o Chrome leve no Linux
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage', // Vital para Docker/Render
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', 
+            '--disable-gpu'
+        ]
+    }
 }).then((client) => {
     start(client);
     iniciarOuvinteDeAuth(client);
 }).catch((error) => console.log(error));
-
-// Escuta novos logins no site para mandar código 2FA
-function iniciarOuvinteDeAuth(client) {
-    supabase.channel('auth-listener-bot').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async (payload) => {
-        const novo = payload.new;
-        // Prioriza enviar pelo LID (whatsapp_id) se tiver, senão tenta o phone
-        const destino = novo.whatsapp_id || novo.phone;
-        
-        if (novo?.auth_code && destino) {
-            try {
-                let idEnvio = destino;
-                if (!idEnvio.includes('@')) idEnvio = idEnvio + '@c.us'; // Adiciona sufixo se for número puro
-                await client.sendText(idEnvio, `🔐 Código: *${novo.auth_code}*`);
-            } catch (e) { console.log('Erro envio auth:', e); }
-        }
-    }).subscribe();
-}
 
 // --- 5. LÓGICA PRINCIPAL ---
 function start(client) {
