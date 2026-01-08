@@ -95,6 +95,9 @@ wppconnect.create({
     headless: true,
     logQR: false,
     phoneNumber: '557931992920', // SEU NÚMERO
+
+    autoClose: 0,  // 0 = Nunca fechar sozinho (Espera infinita)
+    qrTimeout: 0,  // 0 = Nunca desistir de gerar o código
     
     catchLinkCode: (str) => {
         console.log('\n================ CÓDIGO DE PAREAMENTO =================');
