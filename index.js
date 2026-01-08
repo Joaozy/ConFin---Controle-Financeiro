@@ -91,7 +91,7 @@ async function analisarMensagem(texto) {
 
 // --- WHATSAPP (MODO DISCO PERSISTENTE) ---
 wppconnect.create({
-    session: 'financeiro-pro',
+    session: 'financeiro-pro-v15',
     headless: true,
     logQR: false,
     phoneNumber: '557931992920', // SEU NÚMERO
