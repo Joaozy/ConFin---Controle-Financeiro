@@ -100,7 +100,7 @@ wppconnect.create({
     logQR: false,
     
     // SEU NÚMERO (Confirme se está correto: 55 + DDD + 9 + Numero)
-    phoneNumber: '5579998134523', 
+    phoneNumber: '557931992920', 
 
     // Desliga cronômetros de erro para dar tempo de conectar
     autoClose: 0, 
