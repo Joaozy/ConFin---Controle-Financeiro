@@ -118,12 +118,42 @@ wppconnect.create({
 function iniciarOuvinteDeAuth(client) {
     supabase.channel('auth-listener-bot').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async (payload) => {
         const novo = payload.new;
-        const destino = novo.whatsapp_id || novo.phone;
-        if (novo?.auth_code && destino) {
+        
+        // Só tenta enviar se tiver código de auth e telefone
+        if (novo?.auth_code && novo?.phone) {
+            console.log(`🔐 Novo pedido de Auth para: ${novo.phone}`);
+            
             try {
-                let idEnvio = destino.includes('@') ? destino : destino + '@c.us';
-                await client.sendText(idEnvio, `🔐 Código: *${novo.auth_code}*`);
-            } catch (e) { console.log('Erro envio auth:', e); }
+                // 1. Limpeza Bruta: Deixa só números
+                let telefoneLimpo = novo.phone.replace(/\D/g, '');
+
+                // 2. Garante o DDI 55 (Brasil) se não tiver
+                // Se tiver menos de 12 dígitos (ex: 79999887766 = 11 digitos), adiciona 55
+                if (telefoneLimpo.length < 12) {
+                    telefoneLimpo = '55' + telefoneLimpo;
+                }
+
+                console.log(`   Tentando enviar para: ${telefoneLimpo}...`);
+
+                // 3. A MÁGICA: Pergunta ao WhatsApp qual o ID real desse número
+                // Isso resolve o problema do 9º dígito automaticamente
+                const check = await client.checkNumberStatus(telefoneLimpo + '@c.us');
+
+                if (check.numberExists && check.id) {
+                    // Manda para o ID oficial que o WhatsApp devolveu
+                    await client.sendText(check.id._serialized, `🔐 Seu código de verificação é: *${novo.auth_code}*`);
+                    console.log(`✅ Código enviado com sucesso para ${check.id._serialized}`);
+                } else {
+                    console.log(`❌ WhatsApp diz que o número ${telefoneLimpo} não existe ou não tem Zap.`);
+                    
+                    // TENTATIVA DE DESESPERO (Fallback): Tenta mandar mesmo assim
+                    // Às vezes o check falha mas o envio funciona
+                    await client.sendText(telefoneLimpo + '@c.us', `🔐 Seu código: *${novo.auth_code}*`);
+                }
+
+            } catch (e) { 
+                console.log('⚠️ Erro crítico ao enviar código:', e); 
+            }
         }
     }).subscribe();
 }
