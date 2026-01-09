@@ -3,24 +3,25 @@ import wppconnect from '@wppconnect-team/wppconnect';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 import http from 'http';
+import path from 'path'; // Necessário para o caminho dinâmico
 
 dotenv.config();
 
-// --- SERVIDOR HEALTHCHECK ---
+// --- 0. SERVIDOR FAKE (MANTÉM O RENDER ONLINE) ---
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.write('🤖 Bot Financeiro PRO Rodando');
+    res.write('🤖 Bot Financeiro Online');
     res.end();
 });
 server.listen(process.env.PORT || 8080);
 
-// --- CONFIGURAÇÃO ---
+// --- 1. CONFIGURAÇÕES GERAIS ---
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_KEY;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- UTILITÁRIOS ---
+// --- 2. UTILITÁRIOS ---
 function normalizarParaComparacao(telefone) {
     if (!telefone) return '';
     let num = telefone.replace(/\D/g, ''); 
@@ -34,38 +35,36 @@ function padronizarCategoria(texto) {
     return texto.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-// --- CÉREBRO DA IA (MODO MULTI-TRANSACIONAL) ---
+// --- 3. CÉREBRO DA IA ---
 async function analisarMensagem(texto) {
-    // Usando o modelo mais inteligente disponível
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
+    // Pode alterar o modelo conforme sua preferência (gemini-1.5-flash, gemini-pro, etc)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const hoje = new Date().toISOString().split('T')[0];
 
     const prompt = `
-    Aja como um contador especialista. Hoje: ${hoje}.
-    Texto do Usuário: "${texto}"
+    Aja como um assistente financeiro (JSON mode).
+    Hoje: ${hoje}.
+    Input do Usuário: "${texto}"
     
-    TAREFA: Identificar TODAS as transações financeiras no texto.
-    O usuário pode enviar várias em uma linha ou em várias linhas.
+    OBJETIVO: Extrair dados para JSON.
     
-    Exemplos:
-    Input: "gastei 10 pão 20 leite" -> Output: 2 transações.
-    Input: "paguei 430 sorvete 500 carne categoria mercado" -> Output: 2 transações (ambas categoria mercado).
+    REGRAS:
+    1. "Paguei 10 mercadoria" -> valor: 10, descricao: "mercadoria", tipo: "despesa".
+    2. "Recebi 50 pix" -> valor: 50, descricao: "pix", tipo: "receita".
+    3. Se não houver categoria, use "Outros".
+    4. Data padrão: ${hoje}.
     
-    RETORNE APENAS UM JSON VÁLIDO COM ESTA ESTRUTURA (ARRAY):
+    FORMATO JSON:
     {
-        "transacoes": [
-            {
-                "acao": "criar" | "editar",
-                "id_ref": null | numero,
-                "dados": {
-                    "tipo": "despesa" | "receita", 
-                    "valor": 0.00, 
-                    "descricao": "string", 
-                    "categoria": "string", 
-                    "data_movimentacao": "YYYY-MM-DD"
-                }
-            }
-        ]
+        "acao": "criar" | "editar",
+        "id_ref": null | numero,
+        "dados": {
+            "tipo": "despesa" | "receita", 
+            "valor": 0.00, 
+            "descricao": "string", 
+            "categoria": "string", 
+            "data_movimentacao": "YYYY-MM-DD"
+        }
     }
     `;
 
@@ -73,121 +72,137 @@ async function analisarMensagem(texto) {
         const result = await model.generateContent(prompt);
         let text = result.response.text();
 
-        // Limpeza do JSON
+        console.log('\n🧠 IA Respondeu:', text);
+
         const inicio = text.indexOf('{');
         const fim = text.lastIndexOf('}');
-        if (inicio === -1) return null;
         
-        const jsonResponse = JSON.parse(text.substring(inicio, fim + 1));
-        
-        // Garante que retorna sempre um array, mesmo que vazio
-        return jsonResponse.transacoes || [];
+        if (inicio === -1 || fim === -1) return null;
+
+        const jsonLimpo = text.substring(inicio, fim + 1);
+        return JSON.parse(jsonLimpo);
 
     } catch (e) { 
-        console.error("Erro IA:", e);
-        return []; 
+        console.error("❌ Erro IA:", e);
+        return null; 
     }
 }
 
-// --- WHATSAPP (MODO DISCO PERSISTENTE) ---
-wppconnect.create({
-    session: 'financeiro-pro-v15',
-    headless: true,
-    logQR: false,
-    phoneNumber: '557931992920', // SEU NÚMERO
+// --- 4. CONEXÃO WHATSAPP (BLINDADA PARA RENDER) ---
 
-    autoClose: 0,  // 0 = Nunca fechar sozinho (Espera infinita)
-    qrTimeout: 0,  // 0 = Nunca desistir de gerar o código
+// Define um caminho único para o perfil do Chrome a cada reinício
+// Isso evita o erro "Profile Locked" (Code 21)
+const pastaSessaoDinamica = path.join(process.cwd(), 'sessions', `chrome-${Date.now()}`);
+
+wppconnect.create({
+    session: 'financeiro-pro-final', 
+    headless: true, // Obrigatório no Render
+    logQR: false,
     
+    // SEU NÚMERO (Confirme se está correto: 55 + DDD + 9 + Numero)
+    phoneNumber: '5579998134523', 
+
+    // Desliga cronômetros de erro para dar tempo de conectar
+    autoClose: 0, 
+    qrTimeout: 0,
+
     catchLinkCode: (str) => {
         console.log('\n================ CÓDIGO DE PAREAMENTO =================');
         console.log(`CODE: ${str}`);
         console.log('=======================================================\n');
     },
 
-    // Configurações para salvar no DISCO (/var/data)
+    // Força o Chrome a usar a pasta limpa que criamos
     puppeteerOptions: {
-        userDataDir: '/var/data/session-pro', // <--- AQUI ESTÁ O SEGREDO DO "NUNCA DESLIGA"
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process', '--disable-gpu']
-    }
+        userDataDir: pastaSessaoDinamica, 
+    },
+
+    // Argumentos vitais para Linux/Docker
+    browserArgs: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process', 
+        '--disable-gpu'
+    ],
 }).then((client) => {
     start(client);
     iniciarOuvinteDeAuth(client);
-}).catch((error) => console.log(error));
+}).catch((error) => {
+    console.log("Erro fatal na inicialização:", error);
+    process.exit(1); // Reinicia o processo em caso de erro grave
+});
 
+// --- 5. OUVINTE DE AUTH (CORRIGIDO PARA AMIGOS) ---
 function iniciarOuvinteDeAuth(client) {
     supabase.channel('auth-listener-bot').on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async (payload) => {
         const novo = payload.new;
         
-        // Só tenta enviar se tiver código de auth e telefone
         if (novo?.auth_code && novo?.phone) {
-            console.log(`🔐 Novo pedido de Auth para: ${novo.phone}`);
-            
+            console.log(`🔐 Auth solicitado para: ${novo.phone}`);
             try {
-                // 1. Limpeza Bruta: Deixa só números
+                // 1. Limpa o número (deixa só digitos)
                 let telefoneLimpo = novo.phone.replace(/\D/g, '');
 
-                // 2. Garante o DDI 55 (Brasil) se não tiver
-                // Se tiver menos de 12 dígitos (ex: 79999887766 = 11 digitos), adiciona 55
-                if (telefoneLimpo.length < 12) {
-                    telefoneLimpo = '55' + telefoneLimpo;
-                }
+                // 2. Garante o DDI 55
+                if (telefoneLimpo.length < 12) telefoneLimpo = '55' + telefoneLimpo;
 
-                console.log(`   Tentando enviar para: ${telefoneLimpo}...`);
-
-                // 3. A MÁGICA: Pergunta ao WhatsApp qual o ID real desse número
-                // Isso resolve o problema do 9º dígito automaticamente
+                // 3. Verifica o ID real no WhatsApp (Resolve problema do 9º dígito)
                 const check = await client.checkNumberStatus(telefoneLimpo + '@c.us');
 
                 if (check.numberExists && check.id) {
-                    // Manda para o ID oficial que o WhatsApp devolveu
-                    await client.sendText(check.id._serialized, `🔐 Seu código de verificação é: *${novo.auth_code}*`);
-                    console.log(`✅ Código enviado com sucesso para ${check.id._serialized}`);
+                    await client.sendText(check.id._serialized, `🔐 Seu código: *${novo.auth_code}*`);
+                    console.log(`✅ Enviado para ID oficial: ${check.id._serialized}`);
                 } else {
-                    console.log(`❌ WhatsApp diz que o número ${telefoneLimpo} não existe ou não tem Zap.`);
-                    
-                    // TENTATIVA DE DESESPERO (Fallback): Tenta mandar mesmo assim
-                    // Às vezes o check falha mas o envio funciona
+                    // Fallback: Tenta enviar mesmo se a checagem falhar
                     await client.sendText(telefoneLimpo + '@c.us', `🔐 Seu código: *${novo.auth_code}*`);
+                    console.log(`⚠️ Enviado forçado para: ${telefoneLimpo}`);
                 }
-
-            } catch (e) { 
-                console.log('⚠️ Erro crítico ao enviar código:', e); 
-            }
+            } catch (e) { console.log('Erro envio auth:', e); }
         }
     }).subscribe();
 }
 
+// --- 6. LÓGICA PRINCIPAL (AUTO-VINCULAÇÃO) ---
 function start(client) {
-    console.log('✅ Bot PRO Iniciado (Multi-Transação)!');
+    console.log('✅ Bot Iniciado (Modo Dinâmico vFinal)!');
     
     client.onMessage(async (message) => {
         if (message.isGroupMsg || message.isStatus || message.from === 'status@broadcast' || message.fromMe) return;
 
-        // --- IDENTIFICAÇÃO (LID ou Telefone) ---
-        let { data: usuario } = await supabase.from('profiles').select('*').eq('whatsapp_id', message.from).single();
+        // 1. Identificação pelo LID (WhatsApp ID)
+        let { data: usuario } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('whatsapp_id', message.from)
+            .single();
 
+        // 2. Auto-Vinculação (Se não achou o LID)
         if (!usuario) {
-            // Lógica de Auto-Vinculação simplificada
-            const textoNumeros = message.body.replace(/\D/g, '');
-            if (textoNumeros.length >= 10 && textoNumeros.length <= 13) {
-                const zapTentado = normalizarParaComparacao(textoNumeros);
+            const textoApenasNumeros = message.body.replace(/\D/g, '');
+            // Se mandou um número de telefone, tenta vincular
+            if (textoApenasNumeros.length >= 10 && textoApenasNumeros.length <= 13) {
+                const zapTentado = normalizarParaComparacao(textoApenasNumeros);
                 const { data: profiles } = await supabase.from('profiles').select('*');
                 const usuarioReal = profiles ? profiles.find(p => normalizarParaComparacao(p.phone) === zapTentado) : null;
 
                 if (usuarioReal) {
                     await supabase.from('profiles').update({ whatsapp_id: message.from }).eq('id', usuarioReal.id);
-                    await client.sendText(message.from, `✅ *Vinculado!* Olá ${usuarioReal.name}.`);
+                    await client.sendText(message.from, `✅ *Vinculado!* Olá ${usuarioReal.name}, agora já te conheço.`);
+                    return;
+                } else {
+                    await client.sendText(message.from, `❌ Telefone ${textoApenasNumeros} não encontrado. Cadastre-se no site primeiro.`);
                     return;
                 }
             }
-            if (!usuario) {
-                await client.sendText(message.from, `👋 Olá! Responda com seu número cadastrado (ex: 79999887766) para vincular.`);
-                return;
-            }
+            await client.sendText(message.from, `👋 Olá! Não reconheci sua conta.\nResponda com seu *número de celular* cadastrado (com DDD) para vincular.\nEx: *79999887766*`);
+            return;
         }
 
-        // --- COMANDOS ESPECIAIS ---
+        // 3. Processamento Normal
         if (message.body.toLowerCase().startsWith('!nome ')) {
             const novoNome = message.body.slice(6).trim();
             await supabase.from('profiles').update({ name: novoNome }).eq('id', usuario.id);
@@ -195,47 +210,34 @@ function start(client) {
             return;
         }
 
-        // --- PROCESSAMENTO INTELIGENTE ---
-        const transacoes = await analisarMensagem(message.body);
+        const resultado = await analisarMensagem(message.body);
         
-        if (!transacoes || transacoes.length === 0) {
-            await client.sendText(message.from, "🤔 Não identifiquei nenhuma transação clara.");
+        if (!resultado) {
+            await client.sendText(message.from, "🤔 Não entendi. Tente: 'Gastei 10 reais padaria'");
             return;
         }
 
-        let resumo = [];
-        let totalSucesso = 0;
+        if (resultado.dados?.categoria) resultado.dados.categoria = padronizarCategoria(resultado.dados.categoria);
 
-        // Processa item por item (Loop)
-        for (const item of transacoes) {
-            if (item.dados?.categoria) item.dados.categoria = padronizarCategoria(item.dados.categoria);
-
-            if (item.acao === 'criar') {
-                const { data, error } = await supabase.from('movimentacoes').insert([{ 
-                    ...item.dados, 
-                    user_phone: usuario.phone, 
-                    profile_id: usuario.id 
-                }]).select();
-
-                if (!error && data) {
-                    totalSucesso++;
-                    const valorStr = parseFloat(item.dados.valor).toFixed(2).replace('.', ',');
-                    // Adiciona ao resumo curto
-                    resumo.push(`✅ ${item.dados.descricao}: R$ ${valorStr} (${item.dados.categoria})`);
-                }
-            } else if (item.acao === 'editar') {
-                await supabase.from('movimentacoes').update(item.dados).eq('id', item.id_ref || 0).eq('profile_id', usuario.id);
-                resumo.push(`✏️ Editado: ID ${item.id_ref}`);
-                totalSucesso++;
+        if (resultado.acao === 'criar') {
+            const { data, error } = await supabase.from('movimentacoes').insert([{ 
+                ...resultado.dados, 
+                user_phone: usuario.phone, 
+                profile_id: usuario.id 
+            }]).select();
+            
+            if (!error && data) {
+                const id = data[0].id;
+                const valor = parseFloat(resultado.dados.valor).toFixed(2).replace('.', ',');
+                const dataMov = resultado.dados.data_movimentacao.split('-').reverse().join('/');
+                const msg = `✅ *Salvo! (#${id})*\n💰 R$ ${valor}\n📝 ${resultado.dados.descricao}\n🏷️ ${resultado.dados.categoria}\n📅 ${dataMov}`;
+                await client.sendText(message.from, msg);
+            } else {
+                await client.sendText(message.from, "❌ Erro ao salvar.");
             }
-        }
-
-        // --- RESPOSTA FINAL ---
-        if (resumo.length > 0) {
-            const cabecalho = transacoes.length > 1 ? `✅ *${totalSucesso} Transações Salvas!*` : `✅ *Salvo com Sucesso!*`;
-            await client.sendText(message.from, `${cabecalho}\n\n${resumo.join('\n')}`);
-        } else {
-            await client.sendText(message.from, "❌ Houve um erro ao salvar os dados.");
+        } else if (resultado.acao === 'editar') {
+            const { error } = await supabase.from('movimentacoes').update(resultado.dados).eq('id', resultado.id_ref || 0).eq('profile_id', usuario.id); 
+            if(!error) await client.sendText(message.from, `✏️ Atualizado!`);
         }
     });
 }
